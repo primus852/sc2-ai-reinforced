@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 import math
 
+from peewee import *
+
 from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.lib import features
@@ -13,7 +15,28 @@ from src import QLearningTable as qlt
 from src import Helper as helper
 from src import Visualizer as vs
 
-# python -m pysc2.bin.agent --map Simple64 --agent refined.DeepAgent --agent_race terran --norender
+# python3 -m pysc2.bin.agent --map Simple64 --agent refined.DeepAgent --agent_race terran --norender --parallel 2
+
+db = SqliteDatabase('db/stats.db')
+
+
+# Database Class
+class BaseModel(Model):
+    class Meta:
+        database = db
+
+
+class Stats(BaseModel):
+    episode = IntegerField()
+    outcome = IntegerField()
+    win_pct = FloatField()
+    loss_pct = FloatField()
+    draw_pct = FloatField()
+
+
+# Create the Database
+db.connect()
+db.create_tables([Stats])
 
 # Constants for ACTION Shortcuts
 _NO_OP = actions.FUNCTIONS.no_op.id
@@ -88,6 +111,9 @@ class DeepAgent(base_agent.BaseAgent):
 
         self.base_top_left = None
 
+        # MySQL Connection
+        self.db = db
+
         # Read previous Learning
         if os.path.isfile(DATA_FILE + '.gz'):
             self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
@@ -149,19 +175,29 @@ class DeepAgent(base_agent.BaseAgent):
             else:
                 print('UNKNOWN RESULT, Episode %i, Result: %i' % (self.episodes, obs.reward))
 
+            # Get Percentages
+            win_pct = round((self.wins * 100 / self.stats_total), 2)
+            loss_pct = round((self.losses * 100 / self.stats_total), 2)
+            draw_pct = round((self.draws * 100 / self.stats_total), 2)
+
             # Append to Stats DataFrame
             self.stats.loc[-1] = {
                 'Episode': self.stats_total,
                 'Outcome': obs.reward,
-                'WinPct': round((self.wins * 100 / self.stats_total), 2),
-                'LossPct': round((self.losses * 100 / self.stats_total), 2),
-                'DrawPct': round((self.draws * 100 / self.stats_total), 2),
+                'WinPct': win_pct,
+                'LossPct': loss_pct,
+                'DrawPct': draw_pct,
             }  # adding a row
             self.stats.index = self.stats.index + 1  # shifting index
             self.stats = self.stats.sort_index()  # sorting by index
 
             # Save Stats to Pickle
             self.stats.to_pickle(STATS_FILE + '.gz', 'gzip')
+
+            # Save the Stats to the SQLite DB
+            entry = Stats(episode=self.stats_total, outcome=obs.reward, win_pct=win_pct, loss_pct=loss_pct,
+                          draw_pct=draw_pct)
+            entry.save()
 
             # Save the Plot
             vis = vs.Visualizer()

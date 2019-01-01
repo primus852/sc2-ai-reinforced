@@ -28,10 +28,10 @@ class Visualizer:
 
         # Close MS Photos (ugly)
         # todo: update
-        helper.kill_process('Microsoft.Photos.exe')
+        # helper.kill_process('Microsoft.Photos.exe')
 
         # Show the Plot
-        img = Image.open(PLOT_FILE)
-        img.show()
+        # img = Image.open(PLOT_FILE)
+        # img.show()
 
 

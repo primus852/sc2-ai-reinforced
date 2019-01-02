@@ -1,5 +1,7 @@
 import random
 import os
+import datetime
+import pytz
 
 import pandas as pd
 import numpy as np
@@ -13,7 +15,6 @@ from pysc2.lib import features
 
 from src import QLearningTable as qlt
 from src import Helper as helper
-from src import Visualizer as vs
 
 # python3 -m pysc2.bin.agent --map Simple64 --agent refined.DeepAgent --agent_race terran --norender --parallel 2
 
@@ -27,11 +28,9 @@ class BaseModel(Model):
 
 
 class Stats(BaseModel):
-    episode = IntegerField()
+    created = DateTimeField(default=datetime.datetime.now(pytz.utc))
     outcome = IntegerField()
-    win_pct = FloatField()
-    loss_pct = FloatField()
-    draw_pct = FloatField()
+    score = IntegerField()
 
 
 # Create the Database
@@ -70,7 +69,6 @@ _TERRAN_BARRACKS = 21
 
 # Files/Foldes to save to
 DATA_FILE = 'data/q_table'
-STATS_FILE = 'data/stats'
 
 # QLearning Actions
 ACTION_DO_NOTHING = 'donothing'
@@ -108,6 +106,7 @@ class DeepAgent(base_agent.BaseAgent):
         self.cc_x = None
 
         self.move_number = 0
+        self.step_counter = 0
 
         self.base_top_left = None
 
@@ -117,24 +116,6 @@ class DeepAgent(base_agent.BaseAgent):
         # Read previous Learning
         if os.path.isfile(DATA_FILE + '.gz'):
             self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
-
-        # Init stats DataFrame
-        if os.path.isfile(DATA_FILE + '.gz'):
-            self.stats = pd.read_pickle(STATS_FILE + '.gz', compression='gzip')
-        else:
-            self.stats = pd.DataFrame(columns=['Episode', 'Outcome', 'WinPct', 'LossPct', 'DrawPct'])
-
-        # Get total episodes
-        self.stats_total = len(self.stats)
-
-        # Get Wins so far
-        self.wins = len(self.stats[self.stats['Outcome'] == 1]) if self.stats_total > 0 else 0
-
-        # Get Losses so far
-        self.losses = len(self.stats[self.stats['Outcome'] == -1]) if self.stats_total > 0 else 0
-
-        # Get Draws so far
-        self.draws = len(self.stats[self.stats['Outcome'] == 0]) if self.stats_total > 0 else 0
 
     @staticmethod
     def split_action(action_id):
@@ -150,6 +131,8 @@ class DeepAgent(base_agent.BaseAgent):
     def step(self, obs):
         super(DeepAgent, self).step(obs)
 
+        self.step_counter += 1
+
         if obs.last():
             reward = obs.reward
 
@@ -162,46 +145,9 @@ class DeepAgent(base_agent.BaseAgent):
 
             self.move_number = 0
 
-            # Total Episodes
-            self.stats_total += 1
-
-            # Check Result
-            if obs.reward == 1:
-                self.wins += 1
-            elif obs.reward == 0:
-                self.draws += 1
-            elif obs.reward == -1:
-                self.losses += 1
-            else:
-                print('UNKNOWN RESULT, Episode %i, Result: %i' % (self.episodes, obs.reward))
-
-            # Get Percentages
-            win_pct = round((self.wins * 100 / self.stats_total), 2)
-            loss_pct = round((self.losses * 100 / self.stats_total), 2)
-            draw_pct = round((self.draws * 100 / self.stats_total), 2)
-
-            # Append to Stats DataFrame
-            self.stats.loc[-1] = {
-                'Episode': self.stats_total,
-                'Outcome': obs.reward,
-                'WinPct': win_pct,
-                'LossPct': loss_pct,
-                'DrawPct': draw_pct,
-            }  # adding a row
-            self.stats.index = self.stats.index + 1  # shifting index
-            self.stats = self.stats.sort_index()  # sorting by index
-
-            # Save Stats to Pickle
-            self.stats.to_pickle(STATS_FILE + '.gz', 'gzip')
-
             # Save the Stats to the SQLite DB
-            entry = Stats(episode=self.stats_total, outcome=obs.reward, win_pct=win_pct, loss_pct=loss_pct,
-                          draw_pct=draw_pct)
+            entry = Stats(outcome=obs.reward, score=obs.observation.score_cumulative[0])
             entry.save()
-
-            # Save the Plot
-            vis = vs.Visualizer()
-            vis.save_plot()
 
             return actions.FunctionCall(_NO_OP, [])
 

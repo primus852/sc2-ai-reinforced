@@ -115,7 +115,7 @@ class DeepAgent(base_agent.BaseAgent):
         if os.path.isfile(DATA_FILE + '.gz'):
             self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
 
-    def splitAction(self, action_id):
+    def split_action(self, action_id):
         smart_action = smart_actions[action_id]
 
         x = 0

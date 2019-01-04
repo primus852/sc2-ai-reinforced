@@ -16,7 +16,7 @@ from pysc2.lib import features
 from src import QLearningTable as qlt
 from src import Helper as helper
 
-# python3 -m pysc2.bin.agent --map Simple64 --agent refined.DeepAgent --agent_race terran --norender --parallel 2
+# python3 -m pysc2.bin.agent --map Simple64 --agent refined.DeepAgent --agent_race terran --norender --parallel 6
 
 db = SqliteDatabase('db/stats.db')
 
@@ -106,8 +106,6 @@ class DeepAgent(base_agent.BaseAgent):
         self.cc_x = None
 
         self.move_number = 0
-        self.step_counter = 0
-
         self.base_top_left = None
 
         # MySQL Connection
@@ -117,8 +115,7 @@ class DeepAgent(base_agent.BaseAgent):
         if os.path.isfile(DATA_FILE + '.gz'):
             self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
 
-    @staticmethod
-    def split_action(action_id):
+    def splitAction(self, action_id):
         smart_action = smart_actions[action_id]
 
         x = 0
@@ -130,8 +127,6 @@ class DeepAgent(base_agent.BaseAgent):
 
     def step(self, obs):
         super(DeepAgent, self).step(obs)
-
-        self.step_counter += 1
 
         if obs.last():
             reward = obs.reward
